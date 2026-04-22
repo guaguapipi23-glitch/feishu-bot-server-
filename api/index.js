@@ -1,16 +1,18 @@
-// 飞书机器人事件订阅服务
-// 部署到 Vercel - API Route 格式
+// 飞书机器人事件订阅服务 - 优化版
+// 部署到 Vercel
 
 export default async function handler(req, res) {
-  // 设置 CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // ===== 快速响应 URL 验证（必须在最前面）=====
+  if (req.method === 'POST') {
+    const body = req.body;
 
-  // 处理 OPTIONS 预检请求
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    // URL 验证 - 立即返回，不做任何其他操作
+    if (body?.type === 'url_verification') {
+      return res.status(200).json({ challenge: body.challenge });
+    }
   }
+
+  // ===== 以下是消息处理逻辑 =====
 
   // 只处理 POST 请求
   if (req.method !== 'POST') {
@@ -19,12 +21,6 @@ export default async function handler(req, res) {
 
   try {
     const body = req.body;
-
-    // 处理 URL 验证
-    if (body.type === 'url_verification') {
-      console.log('URL verification challenge:', body.challenge);
-      return res.status(200).json({ challenge: body.challenge });
-    }
 
     // 处理消息事件
     if (body.header?.event_type === 'im.message.receive_v1') {
@@ -41,24 +37,18 @@ export default async function handler(req, res) {
         messageContent = message.content;
       }
 
-      console.log('收到消息:', {
-        sender: sender.sender_id?.open_id,
-        content: messageContent,
-        chatId: message.chat_id
-      });
+      // 异步处理消息（不阻塞响应）
+      processMessage(messageContent, sender.sender_id?.open_id, message.chat_id).catch(console.error);
 
-      // 解析消息意图并处理
-      const result = await processMessage(messageContent, sender.sender_id?.open_id, message.chat_id);
-
-      return res.status(200).json({ success: true, result });
+      // 立即返回成功
+      return res.status(200).json({ success: true });
     }
 
-    // 其他事件
     return res.status(200).json({ success: true });
 
   } catch (error) {
     console.error('Error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
   }
 }
 
@@ -67,83 +57,25 @@ async function processMessage(content, senderId, chatId) {
   const text = content.trim();
 
   // 解析日报格式
-  const dailyReportMatch = text.match(/记录日报\s*(?:今天)?(.+)/i);
-  if (dailyReportMatch) {
-    return await handleDailyReport(dailyReportMatch[1], chatId);
+  if (/记录日报/i.test(text)) {
+    console.log('收到日报:', text);
+    // TODO: 更新多维表格
+    return;
   }
 
   // 解析任务格式
-  const taskMatch = text.match(/新增任务\s*(.+?)(?:，|$)/i);
-  const deadlineMatch = text.match(/截止\s*(\d{1,2})\/(\d{1,2})/);
-  if (taskMatch) {
-    return await handleNewTask(taskMatch[1], deadlineMatch, chatId);
+  if (/新增任务/i.test(text)) {
+    console.log('收到新任务:', text);
+    // TODO: 更新多维表格
+    return;
   }
 
   // 解析会议总结格式
-  const meetingMatch = text.match(/会议总结\s*(.+)/is);
-  if (meetingMatch) {
-    return await handleMeetingNote(meetingMatch[1], chatId);
+  if (/会议总结/i.test(text)) {
+    console.log('收到会议总结:', text);
+    // TODO: 更新多维表格
+    return;
   }
 
-  // 默认回复
-  return {
-    action: 'unknown',
-    reply: '我不太理解你的意思。试试这些命令：\n\n' +
-           '📌 记录日报 今天接待客户30人，成交15单，成交额28万\n' +
-           '📌 新增任务 完成母亲节活动策划，截止4/25\n' +
-           '📌 会议总结 今天讨论了5.1开业活动的方案...'
-  };
-}
-
-// 处理日报
-async function handleDailyReport(content, chatId) {
-  const customersMatch = content.match(/接待客户?(\d+)人?/);
-  const dealsMatch = content.match(/成交(\d+)单?/);
-  const amountMatch = content.match(/成交额(\d+)万?/);
-
-  const data = {
-    customers: customersMatch ? parseInt(customersMatch[1]) : null,
-    deals: dealsMatch ? parseInt(dealsMatch[1]) : null,
-    amount: amountMatch ? parseInt(amountMatch[1]) * 10000 : null
-  };
-
-  return {
-    action: 'daily_report',
-    data,
-    reply: `✅ 已记录日报\n` +
-           `- 接待客户: ${data.customers || '未识别'}人\n` +
-           `- 成交: ${data.deals || '未识别'}单\n` +
-           `- 成交额: ${data.amount ? (data.amount/10000) + '万' : '未识别'}\n\n` +
-           `数据已更新到「每日经营数据表」`
-  };
-}
-
-// 处理新任务
-async function handleNewTask(taskName, deadlineMatch, chatId) {
-  let deadline = null;
-  if (deadlineMatch) {
-    const month = parseInt(deadlineMatch[1]);
-    const day = parseInt(deadlineMatch[2]);
-    const year = new Date().getFullYear();
-    deadline = `${year}/${month}/${day}`;
-  }
-
-  return {
-    action: 'new_task',
-    taskName,
-    deadline,
-    reply: `✅ 已添加任务\n` +
-           `- 任务: ${taskName}\n` +
-           `- 截止日期: ${deadline || '未设置'}\n\n` +
-           `任务已添加到「任务表」`
-  };
-}
-
-// 处理会议总结
-async function handleMeetingNote(content, chatId) {
-  return {
-    action: 'meeting_note',
-    reply: `✅ 已记录会议总结\n\n` +
-           `内容已保存到「洞察与决策表」`
-  };
+  console.log('未识别的消息:', text);
 }
