@@ -1,13 +1,5 @@
 {
   "name": "feishu-bot-server",
   "version": "1.0.0",
-  "description": "飞书机器人事件订阅服务",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {},
-  "engines": {
-    "node": ">=18"
-  }
+  "type": "module"
 }
