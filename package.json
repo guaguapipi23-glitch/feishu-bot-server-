@@ -1,5 +1,13 @@
 {
   "name": "feishu-bot-server",
   "version": "1.0.0",
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "start": "node bridge.mjs",
+    "dev": "node --watch bridge.mjs"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.0.0",
+    "dotenv": "^16.0.0"
+  }
 }
